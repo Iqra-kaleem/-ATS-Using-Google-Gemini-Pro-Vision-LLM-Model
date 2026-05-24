@@ -1,4 +1,5 @@
 streamlit
-google-generativeai
+transformers
 python-dotenv
 pdf2image
+huggingface_hub

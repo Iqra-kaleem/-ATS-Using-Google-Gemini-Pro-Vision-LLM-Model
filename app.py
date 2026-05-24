@@ -4,41 +4,50 @@ load_dotenv()
 
 import streamlit as st
 import os
-import io
-import base64
+from groq import Groq
 from PIL import Image
 import pdf2image
-from google import genai
+import fitz  # PyMuPDF
 
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
+)
 
-def get_gemini_response(input,pdf_content,prompt):
-    model=genai.GenerativeModel(model_name="models/gemini-1.5-flash")
-    response=model.generate_content([input,pdf_content[0],prompt])
-    return response.text
+def get_groq_response(input,pdf_content,prompt):
+    final_prompt = f"""
+    Job Description
+    {input}
+    
+    Resume
+    {pdf_content}
+
+    {prompt}
+    """
+
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "user",
+                "content": final_prompt
+            }
+        ],
+        model="llama-3.3-70b-versatile"
+    )
+
+    return chat_completion.choices[0].message.content
 
 def input_pdf_setup(uploaded_file):
-    if uploaded_file is not None:
-        ## Convert PDF to images
-        images= pdf2image.convert_from_bytes(uploaded_file.read())
-        
-        first_page=images[0]
+     text = ""
 
-        # Convert to bytes
-        img_byte_arr = io.BytesIO()
-        first_page.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
+     pdf = fitz.open(
+        stream=uploaded_file.read(),
+        filetype="pdf"
+    )
 
-        pdf_parts = [
-        {
-            "mime_type": "image/jpeg",
-            "data": base64.b64encode(img_byte_arr).decode() # encode to base64
-        }
-        ]
+     for page in pdf:
+        text += str(page.get_text())
 
-        return pdf_parts
-    else:
-      raise FileNotFoundError("No file uploaded")
+     return text
     
 ## Streamlit app 
 st.set_page_config(page_title="ATS Resume Expert") 
@@ -64,6 +73,25 @@ if uploaded_file is not None:
     resume to better align with the job requirements.
     """
 
+    input_prompt2 = """
+    You are an experienced career coach and technical mentor with expertise in roles such as 
+    Data Science, Full Stack Development, Web Development, Big Data, DevOps, and AI Engineering.
+
+    Your task is to analyze the provided resume and job description, then identify the skills 
+    the candidate is currently lacking or needs to improve for the target role.
+
+    Provide:
+    1. A list of important missing technical skills.
+    2. A list of missing soft skills or professional skills.
+    3. Recommended tools, technologies, frameworks, or concepts to learn.
+    4. A step-by-step improvement roadmap for the candidate.
+    5. Suggested projects or certifications that can strengthen the profile.
+    6. Interview preparation tips relevant to the job role.
+    7. Final career advice to improve the chances of getting selected.
+
+    Keep the response clear, structured, practical, and beginner-friendly.
+    """
+
     input_prompt3 = """
     You are an skilled ATS(Applicant Tracking System) scanner with a deep understanding of any one job role from
     Data Science, Full Stack ,web developement, Big Data, DEVOPS , AI engineering and deep ATS functionality
@@ -75,16 +103,25 @@ if uploaded_file is not None:
     if submit1:
        if uploaded_file is not None:
            pdf_content=input_pdf_setup(uploaded_file)
-           response= get_gemini_response(input_prompt1, pdf_content,input_text)
+           response= get_groq_response(input_prompt1, pdf_content,input_text)
            st.subheader("The Response is ")
            st.write(response)
        else:
-           st.write("Please upload a PDF file to proceed.")   
+           st.write("Please upload a PDF file to proceed.") 
+
+    elif submit2:
+        if uploaded_file is not None:
+           pdf_content=input_pdf_setup(uploaded_file)
+           response= get_groq_response(input_prompt2, pdf_content,input_text)
+           st.subheader("The Response is ")
+           st.write(response)
+        else:
+           st.write("Please upload a PDF file to proceed.")         
 
     elif submit3:
         if uploaded_file is not None:
            pdf_content=input_pdf_setup(uploaded_file)
-           response= get_gemini_response(input_prompt3, pdf_content,input_text)
+           response= get_groq_response(input_prompt3, pdf_content,input_text)
            st.subheader("The Response is ")
            st.write(response)
         else:
